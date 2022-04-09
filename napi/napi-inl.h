@@ -37,32 +37,7 @@ static inline napi_status AttachData(napi_env env,
       delete static_cast<FreeType*>(data);
     };
   }
-#if (NAPI_VERSION < 5)
-  napi_value symbol, external;
-  status = napi_create_symbol(env, nullptr, &symbol);
-  if (status == napi_ok) {
-    status = napi_create_external(env,
-                              data,
-                              finalizer,
-                              hint,
-                              &external);
-    if (status == napi_ok) {
-      napi_property_descriptor desc = {
-        nullptr,
-        symbol,
-        nullptr,
-        nullptr,
-        nullptr,
-        external,
-        napi_default,
-        nullptr
-      };
-      status = napi_define_properties(env, obj, 1, &desc);
-    }
-  }
-#else  // NAPI_VERSION >= 5
   status = napi_add_finalizer(env, obj, data, finalizer, hint, nullptr);
-#endif
   return status;
 }
 
@@ -205,7 +180,7 @@ struct FinalizeData {
   Hint* hint;
 };
 
-#if (NAPI_VERSION > 3 && !defined(__wasm32__))
+#if !defined(__wasm32__)
 template <typename ContextType=void,
           typename Finalizer=std::function<void(Env, void*, ContextType*)>,
           typename FinalizerDataType=void>
@@ -282,8 +257,6 @@ typename std::enable_if<call == nullptr>::type static inline CallJsWrapper(
   }
 }
 
-#if NAPI_VERSION > 4
-
 template <typename CallbackType, typename TSFN>
 napi_value DefaultCallbackWrapper(napi_env /*env*/, std::nullptr_t /*cb*/) {
   return nullptr;
@@ -294,16 +267,7 @@ napi_value DefaultCallbackWrapper(napi_env /*env*/, Napi::Function cb) {
   return cb;
 }
 
-#else
-template <typename CallbackType, typename TSFN>
-napi_value DefaultCallbackWrapper(napi_env env, Napi::Function cb) {
-  if (cb.IsEmpty()) {
-    return TSFN::EmptyFunctionFactory(env);
-  }
-  return cb;
-}
-#endif  // NAPI_VERSION > 4
-#endif  // NAPI_VERSION > 3 && !defined(__wasm32__)
+#endif  // !defined(__wasm32__)
 
 template <typename Getter, typename Setter>
 struct AccessorCallbackData {
@@ -509,7 +473,6 @@ inline MaybeOrValue<Value> Env::RunScript(String script) {
       _env, status, Napi::Value(_env, result), Napi::Value);
 }
 
-#if NAPI_VERSION > 2
 template <typename Hook, typename Arg>
 void Env::CleanupHook<Hook, Arg>::Wrapper(void* data) NAPI_NOEXCEPT {
   auto* cleanupData =
@@ -527,9 +490,7 @@ void Env::CleanupHook<Hook, Arg>::WrapperWithArg(void* data) NAPI_NOEXCEPT {
   cleanupData->hook(static_cast<Arg*>(cleanupData->arg));
   delete cleanupData;
 }
-#endif  // NAPI_VERSION > 2
 
-#if NAPI_VERSION > 5
 template <typename T, Env::Finalizer<T> fini>
 inline void Env::SetInstanceData(T* data) {
   napi_status status =
@@ -569,7 +530,6 @@ template <typename DataType, typename HintType>
 void Env::DefaultFiniWithHint(Env, DataType* data, HintType*) {
   delete data;
 }
-#endif  // NAPI_VERSION > 5
 
 ////////////////////////////////////////////////////////////////////////////////
 // Value class
@@ -635,13 +595,10 @@ inline bool Value::IsNumber() const {
   return Type() == napi_number;
 }
 
-#if NAPI_VERSION > 5
 inline bool Value::IsBigInt() const {
   return Type() == napi_bigint;
 }
-#endif  // NAPI_VERSION > 5
 
-#if (NAPI_VERSION > 4)
 inline bool Value::IsDate() const {
   if (IsEmpty()) {
     return false;
@@ -652,7 +609,6 @@ inline bool Value::IsDate() const {
   NAPI_THROW_IF_FAILED(_env, status, false);
   return result;
 }
-#endif
 
 inline bool Value::IsString() const {
   return Type() == napi_string;
@@ -870,7 +826,6 @@ inline double Number::DoubleValue() const {
   return result;
 }
 
-#if NAPI_VERSION > 5
 ////////////////////////////////////////////////////////////////////////////////
 // BigInt Class
 ////////////////////////////////////////////////////////////////////////////////
@@ -931,9 +886,7 @@ inline void BigInt::ToWords(int* sign_bit, size_t* word_count, uint64_t* words) 
       _env, _value, sign_bit, word_count, words);
   NAPI_THROW_IF_FAILED_VOID(_env, status);
 }
-#endif  // NAPI_VERSION > 5
 
-#if (NAPI_VERSION > 4)
 ////////////////////////////////////////////////////////////////////////////////
 // Date Class
 ////////////////////////////////////////////////////////////////////////////////
@@ -962,7 +915,6 @@ inline double Date::ValueOf() const {
   NAPI_THROW_IF_FAILED(_env, status, 0);
   return result;
 }
-#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 // Name class
@@ -1615,7 +1567,6 @@ Object::iterator::operator*() {
 }
 #endif  // NAPI_CPP_EXCEPTIONS
 
-#if NAPI_VERSION >= 8
 inline MaybeOrValue<bool> Object::Freeze() {
   napi_status status = napi_object_freeze(_env, _value);
   NAPI_RETURN_OR_THROW_IF_FAILED(_env, status, status == napi_ok, bool);
@@ -1625,7 +1576,6 @@ inline MaybeOrValue<bool> Object::Seal() {
   napi_status status = napi_object_seal(_env, _value);
   NAPI_RETURN_OR_THROW_IF_FAILED(_env, status, status == napi_ok, bool);
 }
-#endif  // NAPI_VERSION >= 8
 
 ////////////////////////////////////////////////////////////////////////////////
 // External class
@@ -1825,7 +1775,6 @@ inline size_t ArrayBuffer::ByteLength() {
   return length;
 }
 
-#if NAPI_VERSION >= 7
 inline bool ArrayBuffer::IsDetached() const {
   bool detached;
   napi_status status = napi_is_detached_arraybuffer(_env, _value, &detached);
@@ -1837,7 +1786,6 @@ inline void ArrayBuffer::Detach() {
   napi_status status = napi_detach_arraybuffer(_env, _value);
   NAPI_THROW_IF_FAILED_VOID(_env, status);
 }
-#endif  // NAPI_VERSION >= 7
 
 ////////////////////////////////////////////////////////////////////////////////
 // DataView class
@@ -2052,10 +2000,8 @@ inline uint8_t TypedArray::ElementSize() const {
     case napi_float32_array:
       return 4;
     case napi_float64_array:
-#if (NAPI_VERSION > 5)
     case napi_bigint64_array:
     case napi_biguint64_array:
-#endif  // (NAPI_VERSION > 5)
       return 8;
     default:
       return 0;
@@ -4626,7 +4572,6 @@ inline Value EscapableHandleScope::Escape(napi_value escapee) {
 }
 
 
-#if (NAPI_VERSION > 2)
 ////////////////////////////////////////////////////////////////////////////////
 // CallbackScope class
 ////////////////////////////////////////////////////////////////////////////////
@@ -4656,7 +4601,6 @@ inline CallbackScope::operator napi_callback_scope() const {
 inline Napi::Env CallbackScope::Env() const {
   return Napi::Env(_env);
 }
-#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 // AsyncContext class
@@ -4920,14 +4864,13 @@ inline void AsyncWorker::OnWorkComplete(Napi::Env /*env*/, napi_status status) {
   }
 }
 
-#if (NAPI_VERSION > 3 && !defined(__wasm32__))
+#if !defined(__wasm32__)
 ////////////////////////////////////////////////////////////////////////////////
 // TypedThreadSafeFunction<ContextType,DataType,CallJs> class
 ////////////////////////////////////////////////////////////////////////////////
 
 // Starting with NAPI 5, the JavaScript function `func` parameter of
 // `napi_create_threadsafe_function` is optional.
-#if NAPI_VERSION > 4
 // static, with Callback [missing] Resource [missing] Finalizer [missing]
 template <typename ContextType,
           typename DataType,
@@ -5083,7 +5026,6 @@ TypedThreadSafeFunction<ContextType, DataType, CallJs>::New(
 
   return tsfn;
 }
-#endif
 
 // static, with Callback [passed] Resource [missing] Finalizer [missing]
 template <typename ContextType,
@@ -5403,7 +5345,6 @@ TypedThreadSafeFunction<ContextType, DataType, CallJs>::FunctionOrEmpty(
   return callback;
 }
 
-#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 // ThreadSafeFunction class
