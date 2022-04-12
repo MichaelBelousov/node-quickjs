@@ -7,6 +7,7 @@
 #include "./vendor/js_native_api.h"
 
 #include <stdlib.h>
+#include <string.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -169,14 +170,16 @@ napi_status napi_create_type_error(napi_env env,
                                    napi_value code,
                                    napi_value msg,
                                    napi_value* result) {
-  **result = JS_NewTypeError(env->context, code, msg);
+  return napi_invalid_arg;
+  //**result = JS_NewTypeError(env->context, code, msg);
   //JS_NewObjectProtoClass(env->context, env->context->native_error_proto[JS_TYPE_ERROR], JS_CLASS_ERROR);
 }
 napi_status napi_create_range_error(napi_env env,
                                     napi_value code,
                                     napi_value msg,
                                     napi_value* result) {
-  **result = JS_NewRangeError(env->context, code, msg);
+  return napi_invalid_arg;
+  //**result = JS_NewRangeError(env->context, code, msg);
 }
 
 // Methods to get the native napi_value from Primitive type
@@ -205,6 +208,79 @@ napi_status napi_get_value_bool(napi_env env,
                                 napi_value value,
                                 bool* result)
   { *result = (bool)value->u.int32; }
+
+// Copies LATIN-1 encoded bytes from a string into a buffer.
+napi_status napi_get_value_string_latin1(napi_env env,
+                                                     napi_value value,
+                                                     char* buf,
+                                                     size_t bufsize,
+                                                     size_t* result) {
+  abort(); // FIXME: implement latin1 in qjs
+}
+
+#define MAX(a,b) ((a)>(b))?(a):(b)
+
+napi_status napi_get_value_string_utf8(napi_env env,
+                                                   napi_value value,
+                                                   char* buf,
+                                                   size_t bufsize,
+                                                   size_t* result) {
+  const char* cstr = JS_ToCStringLen(env->context, result, *value);
+  *result = MAX(bufsize, *result);
+  memcpy(buf, cstr, *result);
+}
+
+
+// Copies UTF-16 encoded bytes from a string into a buffer.
+napi_status napi_get_value_string_utf16(napi_env env,
+                                                    napi_value value,
+                                                    char16_t* buf,
+                                                    size_t bufsize,
+                                                    size_t* result)
+  {
+  abort(); // FIXME: expose wide strings from qjs
+  }
+
+// Methods to coerce values
+// These APIs may execute user scripts
+napi_status napi_coerce_to_bool(
+  napi_env env,
+  napi_value value,
+  napi_value* result
+) {
+  **result = JS_NewBool(env->context, JS_ToBool(env->context, *value));
+  return napi_ok;
+}
+
+napi_status napi_coerce_to_number(
+  napi_env env,
+  napi_value value,
+  napi_value* result
+) {
+  // in what cases is JS_ToInt32 better?
+  double doubleVal;
+  /* FIXME: handle status */ JS_ToFloat64(env->context, &doubleVal, *value);
+  **result = JS_NewFloat64(env->context, doubleVal);
+  return napi_ok;
+}
+
+// maybe I should write this in zig ;)
+
+napi_status napi_coerce_to_object(
+  napi_env env,
+  napi_value value,
+  napi_value* result
+) {
+  // FIXME: implement
+  return napi_invalid_arg;
+}
+napi_status napi_coerce_to_string(napi_env env,
+                                  napi_value value,
+                                  napi_value* result)
+  {
+  **result = JS_ToString(env->context, *value);
+  return napi_ok;
+  }
 
 #ifdef __cplusplus
 } // end extern "C"
