@@ -563,6 +563,10 @@ static js_force_inline JSValue JS_NewFloat64(JSContext *ctx, double d)
     return v;
 }
 
+// ADDED
+struct JSString;
+JSValue JS_NewSymbol(JSContext *ctx, JSString *p, int atom_type);
+
 static inline JS_BOOL JS_IsNumber(JSValueConst v)
 {
     int tag = JS_VALUE_GET_TAG(v);
